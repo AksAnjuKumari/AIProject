@@ -1,0 +1,530 @@
+﻿@{
+    ViewData["Title"] = "Home Page";
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <title>Language Translator</title>
+    <style>
+        body {
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            padding: 20px;
+        }
+
+        .chat-display, .chat-input {
+            resize: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1 class="text-center mb-4 text-primary">Language Translator</h1>
+
+        <div class="translator-container mb-5">
+            <div class="form-group">
+                <label for="languageSelect">Select Language: </label>
+                <select id="languageSelect" class="form-control">
+                    <option value="sv">Swedish</option>
+                    <option value="de">German</option>
+                    <option value="es">Spanish</option>
+                    <option value="fr">French</option>
+                    <option value="si">Sinhala</option>
+                    <option value="hi">Hindi</option>
+                    <!-- Add more options here as needed -->
+                </select>
+            </div>
+            <div class="form-row mb-3">
+                <div class="col">
+                    <textarea id="sourceText" class="form-control" rows="5" placeholder="Enter text..."></textarea>
+                </div>
+                <div class="col">
+                    <textarea id="targetText" class="form-control" rows="5" placeholder="Translation..." readonly></textarea>
+                </div>
+            </div>
+            <button id="translateButton" class="btn btn-primary">Translate</button>
+        </div>
+
+        <h1 class="text-center mb-4 text-primary">Chat With Me</h1>
+
+        <div class="chat-container">
+            <div class="form-group">
+                <textarea id="displayText" class="form-control mb-3 chat-display" rows="10" readonly></textarea>
+            </div>
+            <div class="form-group">
+                <textarea id="chatText" class="form-control mb-3 chat-input" rows="2" placeholder="Enter text..."></textarea>
+            </div>
+            <div class="form-group form-check">
+                <input type="checkbox" class="form-check-input" id="voiceResponse">
+                <label class="form-check-label" for="voiceResponse">Enable Voice Response</label>
+            </div>
+            <div class="btn-group mb-3" role="group">
+                <button id="startSpeech" class="btn btn-primary">Start Speaking</button>
+                <button id="stopSpeech" class="btn btn-secondary">Stop Speaking</button>
+                <button id="send" class="btn btn-success">Send</button>
+            </div>
+        </div>
+
+
+        <h1 class="text-center mb-4 text-primary"> Chat with AI Mood </h1>
+        <div class="chatmood-container">
+            <div class="form-group">
+                <label for="chatInput">Enter your chat:</label>
+                <input type="text" class="form-control" id="chatInput" placeholder="Type your message here">
+            </div>
+            <div class="form-group">
+                <label for="moodSelect">Select Mood:</label>
+                <select class="form-control" id="moodSelect">
+                    <option value="neutral">Neutral</option>
+                    <option value="happy">Happy</option>
+                    <option value="sad">Sad</option>
+                    <option value="angry">Angry</option>
+                </select>
+            </div>
+            
+            <button class="btn btn-primary" id="sendChat">Send</button>
+            <div id="chatResponse" class="mt-4">
+                @* <div class="form-group">
+                    <textarea id="displayText2" class="form-control mb-3 chat-display" rows="10" readonly></textarea>
+                </div> *@
+            </div>
+    </div>
+
+    <script>
+        // Translation logic
+        document.getElementById('translateButton').addEventListener('click', function () {
+            var srcText1 = document.getElementById('sourceText').value;
+            var language1 = document.getElementById('languageSelect').value;
+
+            $.ajax({
+                url: '/Home/Translate', // The URL to send the data to
+                type: 'POST',
+                data: { srcText: srcText1, language: language1 },
+                success: function (response) {
+                    // Handle the response from the server
+                    document.getElementById('targetText').value = response.translatedText;
+                },
+                error: function (xhr, status, error) {
+                    // Handle any errors
+                    alert('An error occurred: ' + error);
+                }
+            });
+        });
+
+        // Chat logic
+        document.getElementById('send').addEventListener('click', function () {
+            var mychat = document.getElementById('chatText').value;
+            var language = document.getElementById('languageSelect').value;
+
+            if (mychat.trim() === "") return;
+
+            var displayTextArea = document.getElementById('displayText');
+            displayTextArea.value += "\nME: " + mychat;
+            document.getElementById('chatText').value = "";
+
+            $.ajax({
+                url: '/Home/Chat', // The URL to send the data to
+                type: 'POST',
+                data: { mychat: mychat, language: language },
+                success: function (response) {
+                    // Handle the response from the server
+                    var aiResponse = response.translatedText;
+                    displayTextArea.value += "\nAI Assistant: " + aiResponse;
+                    displayTextArea.scrollTop = displayTextArea.scrollHeight;
+
+                    if (document.getElementById('voiceResponse').checked) {
+                        var utterance = new SpeechSynthesisUtterance(aiResponse);
+                        utterance.lang = language; // Set the language for the voice response
+                        speechSynthesis.speak(utterance);
+                    }
+                },
+                error: function (xhr, status, error) {
+                    // Handle any errors
+                    alert('An error occurred: ' + error);
+                }
+            });
+        });
+
+        // Speech recognition logic
+        var recognition;
+        if ('webkitSpeechRecognition' in window) {
+            recognition = new webkitSpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+
+            recognition.onresult = function (event) {
+                var interimTranscript = '';
+                var finalTranscript = '';
+
+                for (var i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+
+                document.getElementById('chatText').value = finalTranscript + interimTranscript;
+            };
+
+            recognition.onerror = function (event) {
+                alert('Speech recognition error: ' + event.error);
+            };
+        } else {
+            alert('Speech recognition not supported in this browser.');
+        }
+
+        document.getElementById('startSpeech').addEventListener('click', function () {
+            var language = document.getElementById('languageSelect').value;
+            recognition.lang = language; // Set the language for speech recognition
+            recognition.start();
+        });
+
+        document.getElementById('stopSpeech').addEventListener('click', function () {
+            recognition.stop();
+        });
+    </script>
+
+
+
+    <script>
+        // AI Mood Chat script
+        $(document).ready(function () {
+            $('#sendChat').click(function () {
+                var chatInput = $('#chatInput').val();
+                var mood = $('#moodSelect').val();
+
+                $.ajax({
+                    url: '@Url.Action("Chat", "Home")',
+                    type: 'POST',
+                    data: { mychat: chatInput, mood: mood },
+                    success: function (response) {
+                           // var chatResponse = document.getElementById('displayText2').response.translatedText;
+                             $('#chatResponse').html('<p>' + response.translatedText + '</p>');
+                    },
+                    error: function () {
+                        $('#chatResponse').html('<p>Error occurred while sending chat.</p>');
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
+
+
+
+
+
+@*  @{
+    ViewData["Title"] = "Home Page";
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <title>Language Translator</title>
+    <style>
+        body {
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            padding: 20px;
+        }
+
+        .chat-display, .chat-input {
+            resize: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1 class="text-center mb-4 text-primary">Language Translator</h1>
+
+        <div class="translator-container mb-5">
+            <div class="form-group">
+                <label for="languageSelect">Select Language: </label>
+                <select id="languageSelect" class="form-control">
+                    <option value="sv">Swedish</option>
+                    <option value="de">German</option>
+                    <option value="es">Spanish</option>
+                    <option value="fr">French</option>
+                    <option value="si">Sinhala</option>
+                    <option value="hi">Hindi</option>
+                    <!-- Add more options here as needed -->
+                </select>
+            </div>
+            <div class="form-row mb-3">
+                <div class="col">
+                    <textarea id="sourceText" class="form-control" rows="5" placeholder="Enter text..."></textarea>
+                </div>
+                <div class="col">
+                    <textarea id="targetText" class="form-control" rows="5" placeholder="Translation..." readonly></textarea>
+                </div>
+            </div>
+            <button id="translateButton" class="btn btn-primary">Translate</button>
+        </div>
+
+        <h1 class="text-center mb-4 text-primary">Chat With Me</h1>
+
+        <div class="chat-container">
+            <div class="form-group">
+                <textarea id="displayText" class="form-control mb-3 chat-display" rows="10" readonly></textarea>
+            </div>
+            <div class="form-group">
+                <textarea id="chatText" class="form-control mb-3 chat-input" rows="2" placeholder="Enter text..."></textarea>
+            </div>
+            <div class="form-group form-check">
+                <input type="checkbox" class="form-check-input" id="voiceResponse">
+                <label class="form-check-label" for="voiceResponse">Enable Voice Response</label>
+            </div>
+            <div class="btn-group mb-3" role="group">
+                <button id="startSpeech" class="btn btn-primary">Start Speaking</button>
+                <button id="stopSpeech" class="btn btn-secondary">Stop Speaking</button>
+                <button id="send" class="btn btn-success">Send</button>
+            </div>
+
+            <h1 class="text-center mb-4 text-primary"> Chat with AI Mood </h1>
+            <div class="chatmood-container">
+              <div class="form-group">
+                <label for="chatInput">Enter your chat:</label>
+                <input type="text" class="form-control" id="chatInput" placeholder="Type your message here">
+              </div>
+            <div class="form-group">
+              <label for="moodSelect">Select Mood:</label>
+              <select class="form-control" id="moodSelect">
+                <option value="neutral">Neutral</option>
+                <option value="happy">Happy</option>
+                <option value="sad">Sad</option>
+                <option value="angry">Angry</option>
+              </select>
+            </div>
+              <button class="btn btn-primary" id="sendChat">Send</button>
+              <div id="chatResponse" class="mt-4">
+                    <div class="form-group">
+                        <textarea id="displayText" class="form-control mb-3 chat-display" rows="10" readonly></textarea>
+                    </div>
+            </div>
+            </div>
+
+    
+        </div>
+        </div>
+    </div>
+
+
+    <script>
+        // AI Mood Chat script
+        $(document).ready(function () {
+            $('#sendChat').click(function () {
+                var chatInput = $('#chatInput').val();
+                var mood = $('#moodSelect').val();
+
+                $.ajax({
+                    url: '@Url.Action("Chat", "Home")',
+                    type: 'POST',
+                    data: { mychat: chatInput, mood: mood },
+                    success: function (response) {
+                        $('#chatResponse').html('<p>' + response.translatedText + '</p>');
+                    },
+                    error: function () {
+                        $('#chatResponse').html('<p>Error occurred while sending chat.</p>');
+                    }
+                });
+            });
+        });
+    </script>
+
+
+    <script>
+        // Translation logic
+        document.getElementById('translateButton').addEventListener('click', function () {
+            var srcText1 = document.getElementById('sourceText').value;
+            var language1 = document.getElementById('languageSelect').value;
+
+            $.ajax({
+                url: '/Home/Translate', // The URL to send the data to
+                type: 'POST',
+                data: { srcText: srcText1, language: language1 },
+                success: function (response) {
+                    // Handle the response from the server
+                    document.getElementById('targetText').value = response.translatedText;
+                },
+                error: function (xhr, status, error) {
+                    // Handle any errors
+                    alert('An error occurred: ' + error);
+                }
+            });
+        });
+
+        // Chat logic
+        document.getElementById('send').addEventListener('click', function () {
+            var mychat = document.getElementById('chatText').value;
+            var language = document.getElementById('languageSelect').value;
+
+            if (mychat.trim() === "") return;
+
+            var displayTextArea = document.getElementById('displayText');
+            displayTextArea.value += "\nME: " + mychat;
+            document.getElementById('chatText').value = "";
+
+            $.ajax({
+                url: '/Home/Chat', // The URL to send the data to
+                type: 'POST',
+                data: { mychat: mychat, language: language },
+                success: function (response) {
+                    // Handle the response from the server
+                    var aiResponse = response.translatedText;
+                    displayTextArea.value += "\nAI Assistant: " + aiResponse;
+                    displayTextArea.scrollTop = displayTextArea.scrollHeight;
+
+                    if (document.getElementById('voiceResponse').checked) {
+                        var utterance = new SpeechSynthesisUtterance(aiResponse);
+                        utterance.lang = language; // Set the language for the voice response
+                        speechSynthesis.speak(utterance);
+                    }
+                },
+                error: function (xhr, status, error) {
+                    // Handle any errors
+                    alert('An error occurred: ' + error);
+                }
+            });
+        });
+
+        // Speech recognition logic
+        var recognition;
+        if ('webkitSpeechRecognition' in window) {
+            recognition = new webkitSpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+
+            recognition.onresult = function (event) {
+                var interimTranscript = '';
+                var finalTranscript = '';
+
+                for (var i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+
+                document.getElementById('chatText').value = finalTranscript + interimTranscript;
+            };
+
+            recognition.onerror = function (event) {
+                alert('Speech recognition error: ' + event.error);
+            };
+        } else {
+            alert('Speech recognition not supported in this browser.');
+        }
+
+        document.getElementById('startSpeech').addEventListener('click', function () {
+            var language = document.getElementById('languageSelect').value;
+            recognition.lang = language; // Set the language for speech recognition
+            recognition.start();
+        });
+
+        document.getElementById('stopSpeech').addEventListener('click', function () {
+            recognition.stop();
+        });
+    </script>
+    <footer class="border-top footer text-muted">
+        <div class="container">
+        </div>
+
+    </footer>
+</body>
+</html> *@
+ 
+
+
+
+
+@* @{
+    ViewData["Title"] = "Home Page";
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <title>Language Translator</title>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4 text-primary">Language Translator</h1>
+        <div class="form-group">
+            <label for="chatInput">Enter your chat:</label>
+            <input type="text" class="form-control" id="chatInput" placeholder="Type your message here">
+        </div>
+        <div class="form-group">
+            <label for="moodSelect">Select Mood:</label>
+            <select class="form-control" id="moodSelect">
+                <option value="neutral">Neutral</option>
+                <option value="happy">Happy</option>
+                <option value="sad">Sad</option>
+                <option value="angry">Angry</option>
+            </select>
+        </div>
+        <button class="btn btn-primary" id="sendChat">Send</button>
+        <div id="chatResponse" class="mt-4"></div>
+    </div>
+
+    <script>
+        $(document).ready(function () {
+            $('#sendChat').click(function () {
+                var chatInput = $('#chatInput').val();
+                var mood = $('#moodSelect').val();
+
+                $.ajax({
+                    url: '@Url.Action("Chat", "Home")',
+                    type: 'POST',
+                    data: { mychat: chatInput, mood: mood },
+                    success: function (response) {
+                        $('#chatResponse').html('<p>' + response.translatedText + '</p>');
+                    },
+                    error: function () {
+                        $('#chatResponse').html('<p>Error occurred while sending chat.</p>');
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
+
+ *@
+
+
+
+
+
+
+
+
